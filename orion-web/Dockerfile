@@ -1,24 +1,24 @@
-FROM node:8.9.3
-MAINTAINER Kevin Lin <developer@kevinlin.info>
+FROM node:8 as builder
 
 ARG sha
 ARG mapbox_api_token
 
-RUN apt-get update
-RUN apt-get install -y wget unzip
+RUN wget -O orion-web.tar.gz https://github.com/LINKIWI/orion-web/archive/$sha.tar.gz
+RUN mkdir /orion-web && tar -xvf orion-web.tar.gz -C /orion-web --strip-components=1
 
-RUN wget -O orion-web.zip https://github.com/LINKIWI/orion-web/archive/$sha.zip
-RUN unzip orion-web.zip
-WORKDIR "orion-web-$sha"
+WORKDIR /orion-web
 
 RUN npm install
-RUN npm install -g node-static
+
+# Patch Webpack config to work around https://github.com/webpack-contrib/css-loader/issues/447
+RUN sed -i '94i\  node: { fs: "empty" },' webpack.config.js
 
 ENV NODE_ENV production
 ENV MAPBOX_API_TOKEN $mapbox_api_token
 
 RUN npm run build
 
-EXPOSE 80
+FROM nginx:1.14-alpine
 
-CMD ["static", "dist", "-a", "0.0.0.0", "-p", "80"]
+ADD nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /orion-web/dist /usr/share/nginx/html
